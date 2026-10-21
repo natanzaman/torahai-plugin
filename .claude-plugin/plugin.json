@@ -7,5 +7,6 @@
     "url": "https://enzee.dev"
   },
   "homepage": "https://enzee.dev",
+  "repository": "https://github.com/natanzaman/torahai-plugin",
   "license": "MIT"
 }

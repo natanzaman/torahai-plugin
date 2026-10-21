@@ -14,7 +14,7 @@ Answers about Jewish texts from verified sources. The plugin bundles:
 Claude Code:
 
 ```
-/plugin marketplace add <this repository>
+/plugin marketplace add natanzaman/torahai-plugin
 /plugin install torahai@torahai
 ```
 
@@ -71,4 +71,4 @@ echo '{"transcript_path":"tests/fixtures/not_reviewed.jsonl","stop_hook_active":
 
 ## Licence
 
-MIT.
+MIT (see LICENSE).
