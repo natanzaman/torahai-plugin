@@ -245,6 +245,12 @@ class Blocks(HookCase):
             {"type": "tool_result", "tool_use_id": "toolu_blob", "content": [{"type": "text", "text": mf.review_view(mf.DRAFT)}]}]}})
         self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
 
+    def test_deeply_nested_foreign_result_is_not_a_fail_open(self):
+        # a non-TorahAI server's result nested too deep to parse does not let an unreviewed TorahAI reply through
+        t = mf.answered_turn(mf.Transcript(), review=False)
+        t.tool("mcp__pdf__get_text", {"ref": "x"}, ["[" * 100000 + "]" * 100000])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
+
     def test_result_matched_by_tool_use_id(self):
         # minor 7: the review's own result counts, not the next result in the file (here a later call's result holds a passing view)
         t = mf.answered_turn(mf.Transcript(), review=False)

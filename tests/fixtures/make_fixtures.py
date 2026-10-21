@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SESSION = "00000000-0000-4000-8000-000000000000"
 PLUGIN = "mcp__plugin_torahai_torahai__"
 HAND_ADDED = "mcp__my-torah-connector__"
-# every TorahAI tool result's "source" (apps/web/lib/mcpTools.ts:49 SOURCE_NOTE); it tells a hand-added TorahAI server by any name
+# every TorahAI tool result's "source" (apps/web/lib/mcpTools.ts SOURCE_NOTE); it tells a hand-added TorahAI server by any name
 SOURCE_NOTE = "Texts from Sefaria (sefaria.org); licence per version."
 
 # the reviewed drafts (what Claude sends after review_answer passed)

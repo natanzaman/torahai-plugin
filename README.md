@@ -40,8 +40,8 @@ the reply sent is not the reviewed draft. After one such retry the reply ends wh
 ## Privacy
 
 The hook reads only the file named by `transcript_path`, on this machine; sends nothing. It prints nothing but its block message and,
-when it cannot read its input, one line on stderr saying the reply is not checked; never the reply or the transcript. It needs
-Python 3.9 or later, standard library only.
+when it cannot read its input or hits an unexpected error, one line on stderr saying the reply is not checked; never the reply or
+the transcript. It needs Python 3.9 or later, standard library only.
 
 ## Known gaps (0.1.0)
 

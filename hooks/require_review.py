@@ -22,7 +22,7 @@ TORAHAI_TOOL = re.compile(r"^mcp__(.+)__(search_sources|get_text|verify_quotes|r
 # by hand may be named anything); another server's get_text etc. never does, so its turn is not blocked (a block would ask Claude to send
 # the whole, possibly private, reply to TorahAI)
 PLUGIN_SERVER = "plugin_torahai_torahai"
-# every TorahAI tool result's "source": apps/web/lib/mcpTools.ts:49 SOURCE_NOTE (keep equal)
+# every TorahAI tool result's "source": apps/web/lib/mcpTools.ts SOURCE_NOTE (keep equal)
 SOURCE_NOTE = "Texts from Sefaria (sefaria.org); licence per version."
 
 # pinned block texts (decision 3); Claude reads them
@@ -115,7 +115,7 @@ def _result_text(block: dict) -> str:
 def _json_object(text: str) -> Optional[dict]:
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: nested too deep to parse, so not a review or a TorahAI result
         return None
     return value if isinstance(value, dict) else None
 
