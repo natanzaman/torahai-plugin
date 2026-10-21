@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "p=$(command -v python3) || exit 0; if [ \"$(uname -s)\" = Darwin ] && [ \"$p\" = /usr/bin/python3 ] && ! xcode-select -p >/dev/null 2>&1; then exit 0; fi; exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/require_review.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

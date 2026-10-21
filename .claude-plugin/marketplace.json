@@ -1,0 +1,15 @@
+{
+  "name": "torahai",
+  "description": "The TorahAI plugin",
+  "owner": {
+    "name": "TorahAI",
+    "url": "https://enzee.dev"
+  },
+  "plugins": [
+    {
+      "name": "torahai",
+      "source": "./",
+      "description": "TorahAI: answers about Jewish texts from verified sources, with a review check before a reply ends (Claude Code)."
+    }
+  ]
+}

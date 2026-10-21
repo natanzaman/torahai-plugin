@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "torahai": {
+      "type": "http",
+      "url": "https://enzee.dev/api/mcp"
+    }
+  }
+}

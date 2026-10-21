@@ -1,0 +1,11 @@
+{
+  "name": "torahai",
+  "version": "0.1.0",
+  "description": "TorahAI: answers about Jewish texts from verified sources. Connects the TorahAI MCP server and, in Claude Code, a Stop hook that lets a reply using TorahAI end only after its exact text passed review_answer.",
+  "author": {
+    "name": "TorahAI",
+    "url": "https://enzee.dev"
+  },
+  "homepage": "https://enzee.dev",
+  "license": "MIT"
+}

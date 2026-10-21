@@ -1,0 +1,65 @@
+{
+ "note": "Produced by apps/web/lib/mcpTools.ts draftHashForm (the plugin's Stop hook form); sha256 is hex of the form's UTF-8. Regenerate only if draftHashForm changes.",
+ "vectors": [
+  {
+   "name": "plain",
+   "input": "A reply.",
+   "form": "A reply.",
+   "sha256": "31b060a8a741f9e538a1eabf829c3dd2b4d52472a4d414da0f90449a33b7bf62"
+  },
+  {
+   "name": "crlf_and_trailing_blanks",
+   "input": "  a b  \r\nc\t\r\n\r\nd\r\u00e9 \n\n",
+   "form": "a b\nc\n\nd\n\u00e9",
+   "sha256": "e6e9eaa9dce4c65fa1f6641b67c5b6cdafc549de6e105de4c432ba709a7697e9"
+  },
+  {
+   "name": "lone_cr_and_cr_cr_lf",
+   "input": "one\rtwo\r\r\nthree",
+   "form": "one\ntwo\n\nthree",
+   "sha256": "cddd2f6843556cdbb93c67118c69a684b0d91b2ed7ff173b83b714780cd09976"
+  },
+  {
+   "name": "nfd_latin",
+   "input": "Cafe\u0301 and re\u0301sume\u0301",
+   "form": "Caf\u00e9 and r\u00e9sum\u00e9",
+   "sha256": "db440016f72e35a44760c50d4f065830a7f431f4e6b1d1f665bcd88966ca17fc"
+  },
+  {
+   "name": "hebrew_points_out_of_canonical_order",
+   "input": "\u05d1\u05b0\u05bc\u05e8\u05b5\u05d0\u05e9\u05b4\u05c1\u05d9\u05ea: \u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd vs \u05e9\u05c1\u05b8\u05dc\u05d5\u05b9\u05dd",
+   "form": "\u05d1\u05b0\u05bc\u05e8\u05b5\u05d0\u05e9\u05b4\u05c1\u05d9\u05ea: \u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd vs \u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd",
+   "sha256": "0566bd32a039b2bddbe3b70e419fe952b3499b7fbc4378fed14334d82b91c7eb"
+  },
+  {
+   "name": "keeps_nbsp_vt_ff_and_u2028",
+   "input": "line\u00a0\nnext\u000b\nform\f\nsep\u2028end\u2028",
+   "form": "line\u00a0\nnext\u000b\nform\f\nsep\u2028end\u2028",
+   "sha256": "4c9f87d361337fe3638abcd71bb0448ed07983b8336692433ac9f4c77722595c"
+  },
+  {
+   "name": "leading_and_trailing_blank_lines_and_tabs",
+   "input": "\n\n\t \n  > \"\u05de\u05d0\u05d9\u05de\u05ea\u05d9 \u05e7\u05d5\u05e8\u05d9\u05df \u05d0\u05ea \u05e9\u05de\u05e2 \u05d1\u05e2\u05e8\u05d1\u05d9\u05ea\" (Berakhot 2a:1)  \n\n\u2014 https://www.sefaria.org/Berakhot.2a.1\t\n\n\t",
+   "form": "> \"\u05de\u05d0\u05d9\u05de\u05ea\u05d9 \u05e7\u05d5\u05e8\u05d9\u05df \u05d0\u05ea \u05e9\u05de\u05e2 \u05d1\u05e2\u05e8\u05d1\u05d9\u05ea\" (Berakhot 2a:1)\n\n\u2014 https://www.sefaria.org/Berakhot.2a.1",
+   "sha256": "3fb716995bd450d7125c7f3e945373d8d3c4db44810c19cede471266ac1b364f"
+  },
+  {
+   "name": "inner_blank_lines_kept",
+   "input": "para 1\n\n\n\npara 2   \n   indented stays",
+   "form": "para 1\n\n\n\npara 2\n   indented stays",
+   "sha256": "72dccdf6fda95b81a0107a873902f1e1db21ba2f6249701f0a4bc50a836db3f0"
+  },
+  {
+   "name": "emoji_and_mixed",
+   "input": "Rashi \ud83d\udc4d \u05e8\u05e9\"\u05d9 \u201cquoted\u201d \u2026  \r\n",
+   "form": "Rashi \ud83d\udc4d \u05e8\u05e9\"\u05d9 \u201cquoted\u201d \u2026",
+   "sha256": "cb6862082e0dd455d02724766b00957a2b022f851f2a708c217a3444f6fe40bb"
+  },
+  {
+   "name": "only_blanks_inside_lines",
+   "input": "a \t \t\nb",
+   "form": "a\nb",
+   "sha256": "7e18f737311b2dc3b2f269dd78396b0351f14fb66efa879f768cb23181883c78"
+  }
+ ]
+}
