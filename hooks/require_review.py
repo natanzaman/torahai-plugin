@@ -88,7 +88,7 @@ def read_turn(path: str) -> List[dict]:
             continue
         try:
             entry = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):  # RecursionError: a line nested too deep to parse, skipped like a malformed one
             continue
         parsed += 1
         if not isinstance(entry, dict):

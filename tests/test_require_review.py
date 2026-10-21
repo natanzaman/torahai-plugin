@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unicodedata
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fixtures")
@@ -153,6 +154,11 @@ class Accepts(HookCase):
         text = read(fixture("reviewed_pass")) + '{"type": "assistant", "mess'
         self.assertAllowed(self.write(text))
 
+    def test_deeply_nested_line_is_skipped(self):
+        # minor 4: a line nested too deep for json.loads (RecursionError) is skipped like a malformed one, not a fail open
+        text = read(fixture("reviewed_pass")) + "[" * 100000 + "]" * 100000 + "\n"
+        self.assertAllowed(self.write(text))
+
 
 class Blocks(HookCase):
     def test_not_reviewed(self):
@@ -239,6 +245,13 @@ class Blocks(HookCase):
             {"type": "tool_result", "tool_use_id": "toolu_blob", "content": [{"type": "text", "text": mf.review_view(mf.DRAFT)}]}]}})
         self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
 
+    def test_result_matched_by_tool_use_id(self):
+        # minor 7: the review's own result counts, not the next result in the file (here a later call's result holds a passing view)
+        t = mf.answered_turn(mf.Transcript(), review=False)
+        t.tool(mf.PLUGIN + "review_answer", {"draft": mf.DRAFT, "citations": []}, None)
+        t.tool(mf.PLUGIN + "get_links", {"ref": "Genesis 1:1"}, [mf.review_view(mf.DRAFT)])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_PASSED)
+
     def test_lag_not_resolved(self):
         # the review's tool_result never arrives: no passing review in the turn
         t = mf.answered_turn(mf.Transcript(), review=False)
@@ -289,6 +302,18 @@ class FailOpen(HookCase):
         code = hook.main(io.TextIOWrapper(io.BytesIO(raw), encoding="latin-1"), out, err, lambda s: None)
         self.assertEqual((code, out.getvalue()), (0, ""))
         self.assertEqual(len(err.getvalue().strip().splitlines()), 1, err.getvalue())
+
+    def test_unexpected_error_does_not_leak(self):
+        # minor 7: an unexpected exception carrying the draft names only its class on stderr, prints nothing on stdout
+        def boom(turn, message):
+            raise ValueError(message)
+        with mock.patch.object(hook, "verdict", boom):
+            code, out, err, _ = self.run_hook(fixture("reviewed_pass"))
+        self.assertEqual((code, out), (0, ""))
+        self.assertIn("ValueError", err)
+        for line in mf.DRAFT.split("\n"):
+            if line.strip():
+                self.assertNotIn(line.strip(), err)
 
     def test_unreadable_on_reread(self):
         path = self.write(read(fixture("not_reviewed")))

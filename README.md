@@ -20,23 +20,28 @@ Claude Code:
 
 claude.ai: Customize > Plugins > Add marketplace, then install TorahAI.
 
-Installing the plugin does not connect the connector: add it from the plugin's Connectors tab.
+claude.ai: installing the plugin does not connect the connector; add it from the plugin's Connectors tab. In Claude Code the
+plugin's MCP server starts with the plugin.
 
 ## Where the review hook runs
 
 - Runs: Claude Code. Cowork: not yet tested.
 - Does not run: plain chat on claude.ai (hooks are ignored there), and machines without a working `python3`, including macOS
-  without the Command Line Tools (its `/usr/bin/python3` is a stub that opens an install dialog, so the hook skips it) and Windows,
-  where `python3` may open the Microsoft Store. There the review stays voluntary: the server's instructions still ask for it.
-  If the hook script is missing (the plugin was updated or removed under a running session) or Python fails, the reply ends unchecked.
+  without the Command Line Tools (its `/usr/bin/python3` is a stub that opens an install dialog, so the hook skips it) and Windows
+  where `python3` is the Microsoft Store alias and not a real Python (the hook skips it). There the review stays voluntary: the
+  server's instructions still ask for it.
+- Windows needs Git for Windows (Git Bash): without it Claude Code runs the hook in PowerShell, which cannot parse it, so a "Stop hook
+  error" notice appears after each reply and the review stays voluntary.
+- If the hook script is missing (the plugin was updated or removed under a running session) or Python fails, the reply ends unchecked.
 
 When the hook stops a reply it tells Claude why, in one of three messages: the reply was not reviewed; the review did not pass; or
 the reply sent is not the reviewed draft. After one such retry the reply ends whatever the result (the hook does not loop).
 
 ## Privacy
 
-The hook reads only the file named by `transcript_path`, on this machine; sends nothing. It prints nothing but its block message, never
-the reply or the transcript. It needs Python 3.9 or later, standard library only.
+The hook reads only the file named by `transcript_path`, on this machine; sends nothing. It prints nothing but its block message and,
+when it cannot read its input, one line on stderr saying the reply is not checked; never the reply or the transcript. It needs
+Python 3.9 or later, standard library only.
 
 ## Known gaps (0.1.0)
 
@@ -44,6 +49,8 @@ the reply or the transcript. It needs Python 3.9 or later, standard library only
 - Subagent transcripts (`<session>/subagents/*.jsonl`) are not seen; the Stop hook covers the main conversation only.
 - Plain chat (hooks ignored) and machines without a working `python3`: the review stays voluntary.
 - A reply reworded again after the retry's review goes out unreviewed (one retry, see above).
+- The one retry is shared with other Stop hooks: Claude Code has one "already continuing because of a Stop hook" flag per session, so
+  if another plugin's Stop hook blocked first, the TorahAI hook lets the next stop through.
 
 ## Development
 
@@ -51,6 +58,9 @@ the reply or the transcript. It needs Python 3.9 or later, standard library only
 python3 -m pytest -q tests        # or: python3 -m unittest discover tests
 python3 tests/fixtures/make_fixtures.py   # rewrites the transcript fixtures
 ```
+
+Releases: bump `version` in `.claude-plugin/plugin.json` for every change; Claude Code caches an installed plugin by version, so
+users keep the old copy until it changes.
 
 Run the hook by hand:
 
