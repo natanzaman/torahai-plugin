@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """TorahAI Stop hook: a reply that used TorahAI tools may end only if its exact text passed review_answer.
 
-Claude Code runs this when Claude is about to end a turn (hooks/hooks.json). Input on stdin (Stop event): transcript_path,
-stop_hook_active, last_assistant_message. It reads only the file named by transcript_path, on this machine, and sends nothing.
+Claude Code runs this when Claude is about to end a turn (hooks/hooks.json). Input on stdin (Stop event, read as UTF-8): transcript_path,
+stop_hook_active, last_assistant_message. TorahAI tools are the plugin's server (mcp__plugin_torahai_torahai__*) and any other MCP server
+whose results in the turn carry TorahAI's SOURCE_NOTE (a connector added by hand); the same tool names on other servers are ignored. It reads only the file named by transcript_path, on this machine, and sends nothing.
 stdout is either empty (the reply may end) or one block JSON line; the draft and the transcript are never printed.
 Python 3.9+ standard library only.
 """
@@ -15,9 +16,14 @@ import time
 import unicodedata
 from typing import List, Optional
 
-# the TorahAI tools under any MCP server name: the plugin's is mcp__plugin_torahai_torahai__*, a connector added by hand may be named anything
-TORAHAI_TOOL = re.compile(r"^mcp__.+__(search_sources|get_text|verify_quotes|review_answer|get_links)$")
-REVIEW_SUFFIX = "__review_answer"
+# the TorahAI tool names; group 1 is the MCP server (between mcp__ and the last __<tool>), group 2 the tool
+TORAHAI_TOOL = re.compile(r"^mcp__(.+)__(search_sources|get_text|verify_quotes|review_answer|get_links)$")
+# a server counts as TorahAI only when it is the plugin's own, or one of its tool results in the turn carries SOURCE_NOTE (a connector added
+# by hand may be named anything); another server's get_text etc. never does, so its turn is not blocked (a block would ask Claude to send
+# the whole, possibly private, reply to TorahAI)
+PLUGIN_SERVER = "plugin_torahai_torahai"
+# every TorahAI tool result's "source": apps/web/lib/mcpTools.ts:49 SOURCE_NOTE (keep equal)
+SOURCE_NOTE = "Texts from Sefaria (sefaria.org); licence per version."
 
 # pinned block texts (decision 3); Claude reads them
 NOT_REVIEWED = ("TorahAI: this reply used TorahAI sources but was not reviewed. Call review_answer with the whole reply and its quotes, "
@@ -106,38 +112,73 @@ def _result_text(block: dict) -> str:
     return ""
 
 
+def _json_object(text: str) -> Optional[dict]:
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def verdict(turn: List[dict], message: str) -> Optional[str]:
     """None when the reply may end, else the block reason."""
     # tool calls are in type "assistant" entries only (api-request-blob entries copy message content and are not calls)
-    uses = [b for e in turn if e.get("type") == "assistant" for b in _blocks(e)
-            if b.get("type") == "tool_use" and isinstance(b.get("name"), str) and TORAHAI_TOOL.match(b["name"])]
+    uses = []  # (server, tool, tool_use block) for each TorahAI-named call, in order
+    for e in turn:
+        if e.get("type") != "assistant":
+            continue
+        for b in _blocks(e):
+            m = TORAHAI_TOOL.match(b["name"]) if b.get("type") == "tool_use" and isinstance(b.get("name"), str) else None
+            if m:
+                uses.append((m.group(1), m.group(2), b))
     if not uses:
         return None
-    reviews = [b for b in uses if b["name"].endswith(REVIEW_SUFFIX)]
+    results = [b for e in turn if e.get("type") == "user" for b in _blocks(e) if b.get("type") == "tool_result"]
+    server_of = {b.get("id"): server for server, _, b in uses if isinstance(b.get("id"), str)}
+    torahai = {PLUGIN_SERVER}
+    for r in results:
+        server = server_of.get(r.get("tool_use_id"))
+        if server is not None and server not in torahai:
+            view = _json_object(_result_text(r))
+            if view is not None and view.get("source") == SOURCE_NOTE:
+                torahai.add(server)
+    uses = [(server, tool, b) for server, tool, b in uses if server in torahai]
+    if not uses:
+        return None
+    reviews = [b for _, tool, b in uses if tool == "review_answer"]
     if not reviews:
         return NOT_REVIEWED
-    last_id = reviews[-1].get("id")  # the last review_answer by position (parallel calls are separate entries, in order)
-    results = [b for e in turn if e.get("type") == "user" for b in _blocks(e)
-               if b.get("type") == "tool_result" and b.get("tool_use_id") == last_id]
+    last_id = reviews[-1].get("id")  # the last TorahAI review_answer by position (parallel calls are separate entries, in order)
+    results = [b for b in results if b.get("tool_use_id") == last_id]
     if not results:
         return NOT_PASSED  # no result in the file: not a passing review
     if results[-1].get("is_error"):
         return NOT_PASSED  # draft too long, gate refused, input error (plain text): never a pass
-    try:
-        view = json.loads(_result_text(results[-1]))
-    except ValueError:
-        return NOT_PASSED
-    if not isinstance(view, dict) or view.get("pass") is not True:
+    view = _json_object(_result_text(results[-1]))
+    if view is None or view.get("pass") is not True:
         return NOT_PASSED
     if view.get("draft_sha256") != draft_sha256(message):
         return DIFFERS
     return None
 
 
+def read_stdin(stdin) -> str:
+    """stdin as UTF-8 whatever the locale or PYTHONIOENCODING (the transcript is read as UTF-8 too): the bytes of stdin.buffer when there
+    is one, else the text (a text-only stream, as in the in-process tests). Bytes that are not UTF-8 are Unreadable."""
+    buffer = getattr(stdin, "buffer", None)
+    if buffer is None:
+        return stdin.read()
+    try:
+        return buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        raise Unreadable("stdin is not UTF-8")
+
+
 def main(stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, sleep=time.sleep) -> int:
     try:
+        text = read_stdin(stdin)
         try:
-            data = json.loads(stdin.read())
+            data = json.loads(text)
         except ValueError:
             raise Unreadable("stdin is not JSON")
         if not isinstance(data, dict):

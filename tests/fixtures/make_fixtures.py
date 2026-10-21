@@ -19,6 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SESSION = "00000000-0000-4000-8000-000000000000"
 PLUGIN = "mcp__plugin_torahai_torahai__"
 HAND_ADDED = "mcp__my-torah-connector__"
+# every TorahAI tool result's "source" (apps/web/lib/mcpTools.ts:49 SOURCE_NOTE); it tells a hand-added TorahAI server by any name
+SOURCE_NOTE = "Texts from Sefaria (sefaria.org); licence per version."
 
 # the reviewed drafts (what Claude sends after review_answer passed)
 DRAFT = ("Rashi on Genesis 1:1 explains why the Torah opens with creation (Rashi on Genesis 1:1:1):\n\n"
@@ -115,14 +117,19 @@ def review_view(draft, passed=True):
             "unlisted_quotes": [], "warnings": [], "checklist": "1. ...",
             "next": "pass: send the reply exactly as reviewed." if passed else
                     "not yet: fix the items above and call review_answer again with the corrected reply.",
-            "source": "TorahAI"}
+            "source": SOURCE_NOTE}
     if passed:
         view["draft_sha256"] = draft_sha256(draft)
     return json.dumps(view, ensure_ascii=False)
 
 
-SEARCH = ({"query": "why does the Torah begin with creation"}, ['{"results":[{"ref":"Rashi on Genesis 1:1:1","snippet":"..."}]}'])
-GET_TEXT = ({"ref": "Rashi on Genesis 1:1:1"}, ['{"ref":"Rashi on Genesis 1:1:1","he":"...","en":"..."}'])
+def result(view):
+    """A TorahAI tool result: the JSON view with the server's SOURCE_NOTE, one text block."""
+    return [json.dumps(dict(view, source=SOURCE_NOTE), ensure_ascii=False, separators=(",", ":"))]
+
+
+SEARCH = ({"query": "why does the Torah begin with creation"}, result({"passages": [{"ref": "Rashi on Genesis 1:1:1", "snippet": "..."}]}))
+GET_TEXT = ({"ref": "Rashi on Genesis 1:1:1"}, result({"ref": "Rashi on Genesis 1:1:1", "he": "...", "en": "..."}))
 CITES = [{"ref": "Rashi on Genesis 1:1:1", "quote": "It was not necessary to begin the Torah except from this month"}]
 TOO_LONG = "the reply is too long to review: shorten it to at most 20,000 characters (it must be reviewed whole)"
 
@@ -154,11 +161,11 @@ def build():
     f["not_reviewed"] = answered_turn(earlier_turn(Transcript()), review=False).text(DRAFT)
     # turn 1 reviewed DRAFT and passed; turn 2 used TorahAI with no review
     t = answered_turn(Transcript().snapshot()).text(DRAFT).stop_summary()
-    t.prompt("And Mishnah Berakhot 1:1?").tool(PLUGIN + "get_text", {"ref": "Mishnah Berakhot 1:1"}, ['{"ref":"Mishnah Berakhot 1:1"}'])
+    t.prompt("And Mishnah Berakhot 1:1?").tool(PLUGIN + "get_text", {"ref": "Mishnah Berakhot 1:1"}, result({"ref": "Mishnah Berakhot 1:1"}))
     f["earlier_turn_review"] = t.text(SECOND_ANSWER)
     # review passed, then an auto compaction, then one more TorahAI lookup, then the reviewed draft
     t = answered_turn(earlier_turn(Transcript())).compaction().thinking()
-    f["mid_turn_compaction"] = t.tool(PLUGIN + "get_links", {"ref": "Genesis 1:1"}, ['{"links":[]}']).text(DRAFT)
+    f["mid_turn_compaction"] = t.tool(PLUGIN + "get_links", {"ref": "Genesis 1:1"}, result({"ref": "Genesis 1:1", "groups": []})).text(DRAFT)
     # the review failed, then an isMeta entry (system text) before the reply
     t = answered_turn(earlier_turn(Transcript()), review=[review_view(DRAFT, passed=False)])
     f["meta_in_turn"] = t.meta("<system-reminder>synthetic system text</system-reminder>").text(DRAFT)

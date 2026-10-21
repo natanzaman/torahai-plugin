@@ -6,7 +6,8 @@ Answers about Jewish texts from verified sources. The plugin bundles:
   verify_quotes and review_answer;
 - a skill (`skills/torahai`) that tells Claude when to use TorahAI; the rules for answering live on the server;
 - a Stop hook (`hooks/require_review.py`): in Claude Code, a reply that used TorahAI tools can end only after its exact final text
-  passed review_answer.
+  passed review_answer. TorahAI tools are the plugin's server, or a connector added by hand under any name whose results carry
+  TorahAI's source note; another server's tools of the same name (say a PDF reader's `get_text`) do not count.
 
 ## Install
 
@@ -27,6 +28,7 @@ Installing the plugin does not connect the connector: add it from the plugin's C
 - Does not run: plain chat on claude.ai (hooks are ignored there), and machines without a working `python3`, including macOS
   without the Command Line Tools (its `/usr/bin/python3` is a stub that opens an install dialog, so the hook skips it) and Windows,
   where `python3` may open the Microsoft Store. There the review stays voluntary: the server's instructions still ask for it.
+  If the hook script is missing (the plugin was updated or removed under a running session) or Python fails, the reply ends unchecked.
 
 When the hook stops a reply it tells Claude why, in one of three messages: the reply was not reviewed; the review did not pass; or
 the reply sent is not the reviewed draft. After one such retry the reply ends whatever the result (the hook does not loop).

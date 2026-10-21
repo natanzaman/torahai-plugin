@@ -124,6 +124,14 @@ class Accepts(HookCase):
     def test_hand_added_connector_passed(self):
         self.assertAllowed(fixture("hand_added_connector"))
 
+    def test_other_server_same_tool_names(self):
+        # finding 3: another MCP server's get_text (plain-text result) is not TorahAI: no block, no re-read wait
+        for name, result in [("plain text", ["Page 1: quarterly figures ..."]), ("json, other source", ['{"text": "...", "source": "TorahAI"}'])]:
+            with self.subTest(name):
+                t = mf.Transcript().snapshot().prompt("Summarise my PDF")
+                t.tool("mcp__pdf-reader__get_text", {"path": "/tmp/report.pdf"}, result).text("The report says ...")
+                self.assertEqual(self.assertAllowed(self.write(t.jsonl()), "The report says ..."), [])
+
     def test_stop_hook_active(self):
         self.assertEqual(self.assertAllowed(fixture("not_reviewed"), active=True), [])
 
@@ -192,6 +200,36 @@ class Blocks(HookCase):
     def test_hand_added_connector_not_reviewed(self):
         self.assertBlocked(fixture("hand_added_not_reviewed"), NOT_REVIEWED)
 
+    def test_hand_added_server_known_by_source_note(self):
+        # finding 3: a server under any name whose result carries SOURCE_NOTE is TorahAI; not reviewed -> text 1
+        t = mf.Transcript().snapshot().prompt("Rashi on Genesis 1:1?")
+        t.tool("mcp__some-name__get_text", {"ref": "Rashi on Genesis 1:1:1"}, [json.dumps({"ref": "x", "source": mf.SOURCE_NOTE})])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
+
+    def test_source_note_must_match_exactly(self):
+        # a near-miss source (and the hand-added server's results without SOURCE_NOTE) does not make the server TorahAI
+        t = mf.Transcript().snapshot().prompt("Rashi on Genesis 1:1?")
+        t.tool("mcp__some-name__get_text", {"ref": "x"}, [json.dumps({"ref": "x", "source": mf.SOURCE_NOTE + " "})])
+        self.assertEqual(self.assertAllowed(self.write(t.text(mf.DRAFT).jsonl())), [])
+
+    def test_source_note_of_another_server_does_not_count(self):
+        # server A's SOURCE_NOTE result does not make server B (no such result) TorahAI: B's review_answer is not the review
+        t = mf.answered_turn(mf.Transcript(), prefix=mf.HAND_ADDED, review=False)
+        t.tool("mcp__other__review_answer", {"draft": mf.DRAFT}, [json.dumps({"pass": True, "draft_sha256": mf.draft_sha256(mf.DRAFT)})])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
+
+    def test_non_torahai_review_answer_is_not_the_review(self):
+        # finding 3 (iv): a TorahAI turn; a non-TorahAI server's review_answer passes this exact draft -> still not reviewed
+        t = mf.answered_turn(mf.Transcript(), review=False)
+        t.tool("mcp__other__review_answer", {"draft": mf.DRAFT}, [json.dumps({"pass": True, "draft_sha256": mf.draft_sha256(mf.DRAFT)})])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_REVIEWED)
+
+    def test_non_torahai_review_after_torahai_review_is_ignored(self):
+        # the TorahAI review failed; a later non-TorahAI review_answer "passes": the last TorahAI review decides -> text 2
+        t = mf.answered_turn(mf.Transcript(), review=[mf.review_view(mf.DRAFT, passed=False)])
+        t.tool("mcp__other__review_answer", {"draft": mf.DRAFT}, [json.dumps({"pass": True, "draft_sha256": mf.draft_sha256(mf.DRAFT)})])
+        self.assertBlocked(self.write(t.text(mf.DRAFT).jsonl()), NOT_PASSED)
+
     def test_api_request_blob_is_not_a_tool_call(self):
         # api-request-blob entries copy message content; only type "assistant" entries are tool calls
         t = mf.answered_turn(mf.Transcript(), review=False)
@@ -242,6 +280,16 @@ class FailOpen(HookCase):
             with self.subTest(stdin):
                 self.assertFailOpen(stdin=stdin)
 
+    def test_stdin_not_utf8(self):
+        # finding 2: stdin is read as bytes and decoded as UTF-8; bytes that are not UTF-8 are unreadable (fail open)
+        raw = json.dumps({"transcript_path": fixture("not_reviewed"), "stop_hook_active": False,
+                          "last_assistant_message": "caf\u00e9"}).encode("ascii").replace(b"\\u00e9", b"\xe9")
+        self.assertNotIn(b"\\u00e9", raw)
+        out, err = io.StringIO(), io.StringIO()
+        code = hook.main(io.TextIOWrapper(io.BytesIO(raw), encoding="latin-1"), out, err, lambda s: None)
+        self.assertEqual((code, out.getvalue()), (0, ""))
+        self.assertEqual(len(err.getvalue().strip().splitlines()), 1, err.getvalue())
+
     def test_unreadable_on_reread(self):
         path = self.write(read(fixture("not_reviewed")))
         code, out, err, _ = self.run_hook(path, on_sleep=lambda: os.remove(path))
@@ -272,6 +320,41 @@ class ByHand(unittest.TestCase):
     def run_guard(self, path_dirs):
         env = {"PATH": os.pathsep.join(path_dirs), "CLAUDE_PLUGIN_ROOT": ROOT}
         return self.run_script(["/bin/bash", "-c", self.guard_command()], self.stdin("not_reviewed"), env)
+
+    def run_guard_sh(self, plugin_root):
+        env = {"PATH": os.pathsep.join([os.path.dirname(sys.executable), "/usr/bin", "/bin"]), "CLAUDE_PLUGIN_ROOT": plugin_root}
+        return self.run_script(["/bin/sh", "-c", self.guard_command()], self.stdin("not_reviewed"), env)
+
+    def test_guard_missing_script(self):
+        # finding 1: the plugin folder no longer holds the script (updated or removed under a running session) -> exit 0, no output
+        empty = tempfile.mkdtemp()
+        self.addCleanup(os.rmdir, empty)
+        p = self.run_guard_sh(empty)
+        self.assertEqual((p.returncode, p.stdout), (0, ""), p.stderr)
+
+    def test_guard_interpreter_fails(self):
+        # finding 1: any non-zero exit of the interpreter becomes exit 0 (a Stop hook's exit 2 would block the reply)
+        root = tempfile.mkdtemp()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", root]))
+        os.mkdir(os.path.join(root, "hooks"))
+        for code in (1, 2):
+            with self.subTest(code):
+                with open(os.path.join(root, "hooks", "require_review.py"), "w") as fh:
+                    fh.write("import sys\nsys.exit(%d)\n" % code)
+                p = self.run_guard_sh(root)
+                self.assertEqual((p.returncode, p.stdout), (0, ""), p.stderr)
+
+    def test_non_utf8_locale(self):
+        # finding 2: the Hebrew reply that passed stays allowed whatever the locale or PYTHONIOENCODING says
+        base = {k: v for k, v in os.environ.items() if k not in ("LANG", "LC_ALL", "LC_CTYPE", "PYTHONIOENCODING", "PYTHONUTF8")}
+        # raw UTF-8 bytes (not \\u escapes), as Claude Code may send them
+        stdin = json.dumps({"transcript_path": fixture("reviewed_pass_string_hebrew"), "stop_hook_active": False,
+                            "last_assistant_message": mf.DRAFT_HE}, ensure_ascii=False).encode("utf-8")
+        self.assertIn(mf.DRAFT_HE.split("\n")[0].encode("utf-8"), stdin)
+        for extra in [{"LC_ALL": "en_US.ISO8859-1"}, {"PYTHONIOENCODING": "cp1252"}]:
+            with self.subTest(extra):
+                p = subprocess.run([sys.executable, HOOK_PATH], input=stdin, capture_output=True, timeout=20, env=dict(base, **extra))
+                self.assertEqual((p.returncode, p.stdout, p.stderr), (0, b"", b""))
 
     def fake_bin(self, xcode_select_exit):
         d = tempfile.mkdtemp()
@@ -327,7 +410,8 @@ class Manifests(unittest.TestCase):
         self.assertEqual(list(h["hooks"]), ["Stop"])
         (handler,) = h["hooks"]["Stop"][0]["hooks"]
         self.assertEqual((handler["type"], handler["timeout"]), ("command", 10))
-        self.assertIn('python3 "${CLAUDE_PLUGIN_ROOT}/hooks/require_review.py"', handler["command"])
+        self.assertIn('"${CLAUDE_PLUGIN_ROOT}/hooks/require_review.py"', handler["command"])
+        self.assertNotIn("exec ", handler["command"])  # finding 1: the interpreter's exit status must pass through `|| exit 0`
 
     def test_skill_is_short(self):
         with open(os.path.join(ROOT, "skills", "torahai", "SKILL.md"), encoding="utf-8") as fh:
